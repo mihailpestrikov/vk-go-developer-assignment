@@ -195,3 +195,13 @@ func (sp *subPub) removeSubscription(subject string, sub *subscription) {
 		sp.subjects.Delete(subject)
 	}
 }
+
+func (sp *subPub) Submit(task func()) {
+	sp.workerPool.Submit(task)
+}
+
+func (sp *subPub) RemoveSubscription(subject string, sub Subscription) {
+	if s, ok := sub.(*subscription); ok {
+		sp.removeSubscription(subject, s)
+	}
+}

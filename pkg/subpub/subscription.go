@@ -4,17 +4,22 @@ import (
 	"sync/atomic"
 )
 
+type SubscriptionParent interface {
+	RemoveSubscription(subject string, sub Subscription)
+	Submit(task func())
+}
+
 type subscription struct {
 	subject      string
 	callback     MessageHandler
-	parent       *subPub
+	parent       SubscriptionParent
 	messageCh    chan interface{}
 	quit         chan struct{}
 	active       int32
 	dropStrategy DropStrategy
 }
 
-func newSubscription(subject string, cb MessageHandler, parent *subPub, bufferSize int, dropStrategy DropStrategy) *subscription {
+func newSubscription(subject string, cb MessageHandler, parent SubscriptionParent, bufferSize int, dropStrategy DropStrategy) *subscription {
 	sub := &subscription{
 		subject:      subject,
 		callback:     cb,
@@ -91,14 +96,14 @@ func (s *subscription) Unsubscribe() {
 
 	close(s.quit)
 
-	s.parent.removeSubscription(s.subject, s)
+	s.parent.RemoveSubscription(s.subject, s)
 }
 
 func (s *subscription) processMessages() {
 	for {
 		select {
 		case msg := <-s.messageCh:
-			s.parent.workerPool.Submit(func() {
+			s.parent.Submit(func() {
 				if s.IsActive() {
 					s.callback(msg)
 				}
