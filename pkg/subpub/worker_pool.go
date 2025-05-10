@@ -57,6 +57,13 @@ func (wp *WorkerPool) Start() {
 }
 
 func (wp *WorkerPool) Submit(task func()) {
+	wp.mu.Lock()
+	if !wp.started {
+		wp.mu.Unlock()
+		return
+	}
+	wp.mu.Unlock()
+
 	select {
 	case wp.tasks <- task:
 	case <-wp.quit:
@@ -72,8 +79,11 @@ func (wp *WorkerPool) Stop() {
 	}
 
 	close(wp.quit)
-	close(wp.tasks)
 
 	wp.wg.Wait()
+
+	for len(wp.tasks) > 0 {
+		<-wp.tasks
+	}
 	wp.started = false
 }
