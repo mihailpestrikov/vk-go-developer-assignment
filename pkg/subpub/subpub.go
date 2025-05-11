@@ -3,6 +3,7 @@ package subpub
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 )
 
 type MessageHandler func(msg interface{})
@@ -113,18 +114,18 @@ func (sp *subPub) Publish(subject string, msg interface{}) error {
 
 	subscribers := value.(*sync.Map)
 
-	delivered := false
+	var deliveryCount int32 = 0
 
 	subscribers.Range(func(key, _ interface{}) bool {
 		sub := key.(*subscription)
 		if sub.IsActive() {
 			sub.SendMessage(msg)
-			delivered = true
+			atomic.AddInt32(&deliveryCount, 1)
 		}
 		return true
 	})
 
-	if !delivered {
+	if atomic.LoadInt32(&deliveryCount) == 0 {
 		return ErrPublishFailed
 	}
 

@@ -58,32 +58,59 @@ func (wp *WorkerPool) Start() {
 
 func (wp *WorkerPool) Submit(task func()) {
 	wp.mu.Lock()
-	if !wp.started {
-		wp.mu.Unlock()
+	started := wp.started
+	wp.mu.Unlock()
+
+	if !started {
 		return
 	}
-	wp.mu.Unlock()
+
+	defer func() {
+		if r := recover(); r != nil {
+		}
+	}()
 
 	select {
 	case wp.tasks <- task:
 	case <-wp.quit:
+	default:
+		go task()
 	}
 }
 
 func (wp *WorkerPool) Stop() {
 	wp.mu.Lock()
-	defer wp.mu.Unlock()
-
 	if !wp.started {
+		wp.mu.Unlock()
 		return
+	}
+
+	wp.started = false
+	wp.mu.Unlock()
+
+	var remainingTasks []func()
+
+	draining := true
+	for draining {
+		select {
+		case task, ok := <-wp.tasks:
+			if !ok {
+				draining = false
+			} else {
+				remainingTasks = append(remainingTasks, task)
+			}
+		default:
+			draining = false
+		}
 	}
 
 	close(wp.quit)
 
 	wp.wg.Wait()
 
-	for len(wp.tasks) > 0 {
-		<-wp.tasks
+	for _, task := range remainingTasks {
+		task()
 	}
-	wp.started = false
+
+	close(wp.tasks)
 }
